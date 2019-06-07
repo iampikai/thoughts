@@ -1,15 +1,21 @@
 package com.suvankar.thoughts;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
@@ -21,6 +27,8 @@ import java.util.List;
 
 public class RegisterActivity extends AppCompatActivity {
 
+    private RelativeLayout rlayout;
+    private Animation animation;
     Boolean newUserFlag = true;
     Intent next_activity;
     List<UserModel> userData;
@@ -30,6 +38,10 @@ public class RegisterActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
+        TextView tv = findViewById(R.id.tvSignUp);
+        Typeface typeface = Typeface.createFromAsset(getAssets(), "fonts/indieflower.ttf");
+        tv.setTypeface(typeface);
+
         final SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
         userData = new ArrayList<>();
 
@@ -38,6 +50,7 @@ public class RegisterActivity extends AppCompatActivity {
         final EditText email_field = findViewById(R.id.Email);
         final EditText password_field = findViewById(R.id.Password);
         final EditText confirm_password_field = findViewById(R.id.confirm_password);
+
         Button registerButton = findViewById(R.id.register);
         registerButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -72,8 +85,8 @@ public class RegisterActivity extends AppCompatActivity {
                             editor.putString("active_user", gson.toJson(userData.get(userData.size() - 1)));
                             editor.putBoolean("isLoggedIn", true);
                             editor.commit();
+                            next_activity.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                             startActivity(next_activity);
-                            finish();
                         }
                     } else
                         Toast.makeText(RegisterActivity.this, "Passwords do not match", Toast.LENGTH_LONG).show();

@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.util.Log;
@@ -66,8 +67,11 @@ public class ThoughtsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         @Override
         public void onClick(View v) {
             int position = getLayoutPosition();
-            String thought = thoughtList.get(position).getText();
-//            MainActivity.saveThought(true, position);
+            MainActivity.thoughtIndex = position;
+            MainActivity.updateThoughtFlag = true;
+            Intent intent = new Intent(v.getContext(), EditThoughtActivity.class);
+            intent.putExtra(EditThoughtActivity.CURRENT_THOUGHT, thoughtList.get(position).getText());
+            v.getContext().startActivity(intent);
         }
     }
 }

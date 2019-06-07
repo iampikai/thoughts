@@ -9,7 +9,9 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.app.ActivityOptions;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -18,6 +20,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -32,6 +35,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.widget.Toolbar;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 
@@ -45,23 +49,25 @@ import java.util.zip.Inflater;
 
 public class MainActivity extends AppCompatActivity {
 
-    private List<UserModel> users;
-    private ConstraintLayout constraintLayout;
-    private RecyclerView recyclerView;
-    private ThoughtsAdapter thoughtsAdapter;
-    private Gson gson;
-    private UserModel activeUser;
-    private DateFormat dateFormat;
-    private Dialog dialog;
-    private SharedPreferences sharedPreferences;
-    private List<ThoughtModel> thoughtList;
+    public static boolean updateThoughtFlag;
+    public static int thoughtIndex = 0;
+
+    private static Context context;
+    public static ConstraintLayout constraintLayout;
+    public static RecyclerView recyclerView;
+    private static ThoughtsAdapter thoughtsAdapter;
+    private static Gson gson;
+    private static UserModel activeUser;
+    private static DateFormat dateFormat;
+    private static SharedPreferences sharedPreferences;
     private List<String> colorList;
-    private FloatingActionButton fab;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        context = MainActivity.this;
 
         dateFormat = new SimpleDateFormat("dd/MM/yyyy, hh:mm aaa");
 
@@ -75,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
         Type users_type = new TypeToken<List<UserModel>>() {
         }.getType();
         activeUser = gson.fromJson(activeUserJson, user_type);
-        users = gson.fromJson(usersJson, users_type);
+        List<UserModel> users = gson.fromJson(usersJson, users_type);
 
         for (UserModel userModel : users) {
             if (userModel.getEmail().equals(activeUser.getEmail())) {
@@ -92,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
         BottomAppBar bottomAppBar = findViewById(R.id.bottom_app_bar);
         setSupportActionBar(bottomAppBar);
 
-        thoughtList = activeUser.getThoughts();
+        final List<ThoughtModel> thoughtList = activeUser.getThoughts();
         colorList = new ArrayList<>();
 
         initLists();
@@ -105,106 +111,71 @@ public class MainActivity extends AppCompatActivity {
         }
         recyclerView.setAdapter(thoughtsAdapter);
         recyclerView.setLayoutManager(new StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL));
+        ItemTouchHelper.SimpleCallback simpleCallback = new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.RIGHT) {
+            @Override
+            public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
+                return false;
+            }
 
-        fab = findViewById(R.id.fab);
+            @Override
+            public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
+                int index = viewHolder.getAdapterPosition(); //swiped position
+                if (direction == ItemTouchHelper.RIGHT) {//swipe right
+                    thoughtList.remove(index);
+
+                    String json = sharedPreferences.getString("users", "");
+                    Type type = new TypeToken<List<UserModel>>() {
+                    }.getType();
+                    List<UserModel> users = gson.fromJson(json, type);
+                    for (UserModel user : users) {
+                        if (user.getEmail().equals(activeUser.getEmail())) {
+                            user.setThoughts(activeUser.getThoughts());
+                        }
+                    }
+                    sharedPreferences.edit().putString("users", gson.toJson(users)).commit();
+
+                    thoughtsAdapter.notifyItemRemoved(index);
+                    thoughtsAdapter.notifyDataSetChanged();
+
+                    if (thoughtList.isEmpty()) {
+                        constraintLayout.setVisibility(View.VISIBLE);
+                        recyclerView.setVisibility(View.GONE);
+                    }
+                }
+            }
+        };
+        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(simpleCallback);
+        itemTouchHelper.attachToRecyclerView(recyclerView);
+
+        final FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showDialog();
+                Intent intent = new Intent(MainActivity.this, EditThoughtActivity.class);
+                startActivity(intent);
             }
         });
     }
 
-    private void showDialog() {
-        final View dialogView = View.inflate(this, R.layout.dialog, null);
-        dialog = new Dialog(this, R.style.AppTheme);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setCancelable(false);
-        dialog.setContentView(dialogView);
-        FloatingActionButton fab_2 = dialog.findViewById(R.id.save_thought_fab);
-        fab_2.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Toast.makeText(MainActivity.this, "Thought saved.", Toast.LENGTH_SHORT).show();
-                saveThought();
-                revealShow(dialogView, false, dialog);
-            }
-        });
-        ImageView imageView = (ImageView) dialog.findViewById(R.id.closeDialogImg);
-        imageView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Toast.makeText(MainActivity.this, "Thought discarded.", Toast.LENGTH_SHORT).show();
-                revealShow(dialogView, false, dialog);
-            }
-        });
-        dialog.setOnShowListener(new DialogInterface.OnShowListener() {
-            @Override
-            public void onShow(DialogInterface dialogInterface) {
-                revealShow(dialogView, true, null);
-            }
-        });
-        dialog.setOnKeyListener(new DialogInterface.OnKeyListener() {
-            @Override
-            public boolean onKey(DialogInterface dialogInterface, int i, KeyEvent keyEvent) {
-                if (i == KeyEvent.KEYCODE_BACK) {
-                    revealShow(dialogView, false, dialog);
-                    return true;
-                }
-                return false;
-            }
-        });
-        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
-        dialog.show();
-    }
+    public static void saveThought(String thought) {
 
-//    public static void updateThought() {
-//        EditText editText = dialog.findViewById(R.id.thoughtEdit);
-//
-//        if (!editText.getText().toString().isEmpty()) {
-//
-//            constraintLayout.setVisibility(View.GONE);
-//            recyclerView.setVisibility(View.VISIBLE);
-//
-//            ThoughtModel thoughtModel = new ThoughtModel(editText.getText().toString(),
-//                    dateFormat.format(Calendar.getInstance().getTime()));
-//            String json = sharedPreferences.getString("users", "");
-//            Type type = new TypeToken<List<UserModel>>() {
-//            }.getType();
-//            List<UserModel> users = gson.fromJson(json, type);
-//
-//            activeUser.getThoughts().add(thoughtModel);
-//
-//            for (UserModel user : users) {
-//                if (user.getEmail().equals(activeUser.getEmail())) {
-//                    user.setThoughts(activeUser.getThoughts());
-//                }
-//            }
-//
-//            thoughtsAdapter.notifyDataSetChanged();
-//            Log.e("USERS", users.toString());
-//            sharedPreferences.edit().putString("users", gson.toJson(users)).commit();
-//        } else
-//            Toast.makeText(MainActivity.this, "Thought discarded.", Toast.LENGTH_SHORT).show();
-//    }
-
-    public void saveThought() {
-
-        EditText editText = dialog.findViewById(R.id.thoughtEdit);
-
-        if (!editText.getText().toString().isEmpty()) {
+        if (!thought.isEmpty()) {
 
             constraintLayout.setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
 
-            ThoughtModel thoughtModel = new ThoughtModel(editText.getText().toString(),
+            ThoughtModel thoughtModel = new ThoughtModel(thought,
                     dateFormat.format(Calendar.getInstance().getTime()));
+
             String json = sharedPreferences.getString("users", "");
             Type type = new TypeToken<List<UserModel>>() {
             }.getType();
             List<UserModel> users = gson.fromJson(json, type);
 
-            activeUser.getThoughts().add(thoughtModel);
+            if (updateThoughtFlag)
+                activeUser.getThoughts().set(thoughtIndex, thoughtModel);
+            else
+                activeUser.getThoughts().add(thoughtModel);
 
             for (UserModel user : users) {
                 if (user.getEmail().equals(activeUser.getEmail())) {
@@ -213,38 +184,13 @@ public class MainActivity extends AppCompatActivity {
             }
 
             thoughtsAdapter.notifyDataSetChanged();
-            Log.e("USERS", users.toString());
             sharedPreferences.edit().putString("users", gson.toJson(users)).commit();
-        } else
-            Toast.makeText(MainActivity.this, "Thought discarded.", Toast.LENGTH_SHORT).show();
-
-    }
-
-    private void revealShow(View dialogView, boolean b, final Dialog dialog) {
-        final View view = dialogView.findViewById(R.id.dialog);
-        int w = view.getWidth();
-        int h = view.getHeight();
-        int endRadius = (int) Math.hypot(w, h);
-        int cx = (int) (fab.getX() + (fab.getWidth() / 2));
-        int cy = (int) (fab.getY()) + fab.getHeight() + 56;
-        if (b) {
-            Animator revealAnimator = ViewAnimationUtils.createCircularReveal(view, cx, cy, 0, endRadius);
-            view.setVisibility(View.VISIBLE);
-            revealAnimator.setDuration(700);
-            revealAnimator.start();
+            if (MainActivity.updateThoughtFlag)
+                Toast.makeText(context, "Thought updated.", Toast.LENGTH_SHORT).show();
+            else
+                Toast.makeText(context, "Thought saved.", Toast.LENGTH_SHORT).show();
         } else {
-            Animator anim =
-                    ViewAnimationUtils.createCircularReveal(view, cx, cy, endRadius, 0);
-            anim.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    super.onAnimationEnd(animation);
-                    dialog.dismiss();
-                    view.setVisibility(View.INVISIBLE);
-                }
-            });
-            anim.setDuration(700);
-            anim.start();
+            Toast.makeText(context, "Thought discarded.", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -273,30 +219,12 @@ public class MainActivity extends AppCompatActivity {
         colorList.add("#f4ff81");
         colorList.add("#ffd180");
         colorList.add("#ffccbc");
-
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("Today I am sick", dateFormat.format(Calendar.getInstance().getTime())));
-//        thoughtList.add(new ThoughtModel("I think I should die. Or maybe not?", dateFormat.format(Calendar.getInstance().getTime())));
     }
+
+    @Override
+    protected void onResume() {
+        updateThoughtFlag = false;
+        super.onResume();
+    }
+
 }
