@@ -57,6 +57,7 @@ public class LoginActivity extends AppCompatActivity {
         final EditText email_field = findViewById(R.id.login_email);
         final EditText password_field = findViewById(R.id.login_password);
         login = findViewById(R.id.login_button);
+        final Button fb = findViewById(R.id.fbLogin);
         ImageButton register = findViewById(R.id.register_button);
 
         if (isLoggedIn) {
@@ -107,7 +108,7 @@ public class LoginActivity extends AppCompatActivity {
 
                 Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
                 Pair[] pairs = new Pair[1];
-                pairs[0] = new Pair<View, String>(login, "tvLogin");
+                pairs[0] = new Pair<View, String>(fb, "tvLogin");
                 ActivityOptions activityOptions = ActivityOptions.makeSceneTransitionAnimation(LoginActivity.this, pairs);
                 startActivity(intent, activityOptions.toBundle());
             }
